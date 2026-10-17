@@ -82,7 +82,7 @@ const G = {
     33: 'arrow / systolic / diastolic',
     34: `preceptor|${PRECEPTOR} / results|result / okay|\\bok\\b|alright|all right`,
     36: '24-hour|24.?hour|twenty.?four / 36.5|36 point 5|thirty.?six point five / 37.5|37 point 5|thirty.?seven point five / 60 to 100|60-100|sixty to (a )?hundred / 12 to 20|12-20|twelve to twenty / 110 to 140|110-140|one ten to one forty / 60 to 90|60-90|sixty to ninety / 30 seconds|thirty seconds|doubled',
-    38: 'recheck|re-check|re check|check it again / report / straight away|right away|immediately',
+    38: 'recheck|re-check|re check|check it again / report / straight away|right away|immediately / explain / safe',
     39: 'concludes|conclude|finished|all done / half an hour|30 minutes|thirty minutes|come back',
     40: 'call bell|bell / sitting|bed / water',
     41: 'thank',
@@ -125,7 +125,7 @@ const G = {
     8: 'beta|blocker / blood pressure|hypertension / heart failure / fatigue|tired / bradycardia|slow heart / postural|posture|standing / cold hands|cold / palpitations|palpitation / dizziness|dizz / headache / nausea|nauseous / abdominal pain|abdominal|tummy|stomach / diarrhoea|diarr / constipation|constipat / dyspnoea|dyspn|disp|short of breath|breathless / pulse|heart rate / falls risk|falls|fall',
     9: 'label / 47.5|47 point 5|forty.?seven point five / one|1 tablet|\\b1\\b|CR|controlled',
     13: `morning|hello|kia ora|\\bhi\\b / student / ${PRECEPTOR} / metoprolol|metropolol|meto|metro / new medicine|new`,
-    20: 'blood pressure / heart / tired|fatigue / slow heartbeat|slow / pounding / dizzy|light.?headed / stand up|stand / cold hands|cold / headaches|headache / feeling sick|sick|nause / tummy pain|tummy|stomach|abdominal / diarrhoea|diarr / constipation|constipat / short of breath|breath / bell',
+    20: 'blood pressure / heart / tired|fatigue / slow heartbeat|slow / pounding / dizzy|light.?headed / stand up|stand / cold hands|cold / headaches|headache / feeling sick|sick|nause / tummy pain|tummy|stomach|abdominal / diarrhoea|diarr / constipation|constipat / short of breath|breath / bell / tingly|tingl / throat / itchy|itch',
     21: 'own words / dizzy',
     25: 'Sitting|sit|upright / water / whole|crush|chew',
     29: 'date / 24-hour|24.?hour|twenty.?four|time / 47.5 mg|47.5|mg|milligram|unit / initials|initial',
@@ -187,6 +187,16 @@ const raw = {
   para: parse(section(/^### Model run, step by step: paracetamol/)),
   meto: parse(section(/^### Model run, step by step: metoprolol/)),
 };
+// Additions from the lecturers' demo videos (transcribed 17 Oct 2026), appended to the reference doc's model words.
+const EXTRA = {
+  vs: { 38: ' I’d also explain it to him, and make sure he’s safe.' },
+  meto: { 20: ' As with any new medicine, if your lips feel tingly, your throat feels tight, it’s hard to breathe, or you get an itchy rash, ring your bell straight away.' },
+};
+for (const [k, add] of Object.entries(EXTRA)) for (const [n, s] of Object.entries(add)) {
+  const st = raw[k].find(x => x.n === +n);
+  if (!st || !st.words) throw new Error('EXTRA target missing: ' + k + ' ' + n);
+  st.words += s;
+}
 const LABEL = { vs: 'Vital signs', para: 'Med admin · Paracetamol', meto: 'Med admin · Metoprolol' };
 const problems = [];
 
