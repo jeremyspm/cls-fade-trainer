@@ -1,0 +1,82 @@
+[
+ {
+  "id": "vs-6",
+  "who": "Mr Luke",
+  "text": "Oh, I’m doing okay. A little bit tired this morning."
+ },
+ {
+  "id": "vs-9",
+  "who": "Mr Luke",
+  "text": "John Luke. Sixteenth of December, 1942."
+ },
+ {
+  "id": "vs-12",
+  "who": "Mr Luke",
+  "text": "Oh, John’s fine."
+ },
+ {
+  "id": "vs-15",
+  "who": "Mr Luke",
+  "text": "Yes, please."
+ },
+ {
+  "id": "vs-35",
+  "who": "RN",
+  "text": "Okay, just talk me through what you’ve done so far."
+ },
+ {
+  "id": "vs-37",
+  "who": "RN",
+  "text": "What’s your responsibility as a student if any of those were outside the normal range, too high or too low?"
+ },
+ {
+  "id": "ma-7",
+  "who": "RN",
+  "text": "So can you tell me a little bit about this drug?"
+ },
+ {
+  "id": "ma-15",
+  "who": "Mr Luke",
+  "text": "John Luke. Sixteenth of December, 1942."
+ },
+ {
+  "id": "ma-17",
+  "who": "Mr Luke",
+  "text": "No, not that I know of."
+ },
+ {
+  "id": "ma-19",
+  "who": "Mr Luke",
+  "text": "No, I don’t think so. The doctor just said it was a new one."
+ },
+ {
+  "id": "para-22",
+  "who": "Mr Luke",
+  "text": "It’s for my back pain, and if I get a rash or feel funny I ring the bell. And I don’t take any of my own Panadol."
+ },
+ {
+  "id": "ma-24",
+  "who": "Mr Luke",
+  "text": "Sure, that was pretty clear. Thank you."
+ },
+ {
+  "id": "ma-30",
+  "who": "RN",
+  "text": "Can you describe to me how you used the three steps of patient education just now?"
+ },
+ {
+  "id": "meto-22",
+  "who": "Mr Luke",
+  "text": "It’s for my blood pressure and my heart, and if I feel dizzy I ring the bell before I get up."
+ },
+ {
+  "id": "banner-para",
+  "who": "RN",
+  "text": "Your drug today is paracetamol, one gram, P O, four times a day."
+ },
+ {
+  "id": "banner-meto",
+  "who": "RN",
+  "text": "Your drug today is metoprolol succinate C R, forty-seven point five milligrams, P O, daily."
+ }
+]

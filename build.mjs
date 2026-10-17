@@ -111,7 +111,7 @@ const G = {
   para: {
     5: 'regular / dated|signed / Paracetamol|paracetamol|para / 1 g|1g|1 gram|one gram|1000 / \\bPO\\b|p o|by mouth|oral / qid|q i d|four times|4 times',
     6: 'four times|4 times|qid|q i d / last dose / due',
-    8: 'analgesic / backache|back pain|back / very rare|rare|none / liver / 4 hours|four hours / 4 grams|4 g|4g|four grams',
+    8: 'analgesic / backache|back pain|back / very rare|rare|none / allergic|allerg|rash / bronchospasm|broncho|bronchial spasm / platelets|platelet / liver / 4 hours|four hours / 4 grams|4 g|4g|four grams',
     9: 'label / 500 / two|2 tablets|\\b2\\b',
     13: `morning|hello|kia ora|\\bhi\\b / student / ${PRECEPTOR} / paracetamol|para / new medicine|new`,
     20: 'backache|back pain|back / side effects|side effect / rash / swelling|swell / trouble breathing|breathing|breath / bell / liver',
@@ -216,6 +216,12 @@ const data = {
   scripts: Object.fromEntries(Object.entries(raw).map(([k, steps]) => [k, { label: LABEL[k], steps }])),
   forks: FORKS,
 };
+const lines = [];
+for (const [k, s] of Object.entries(raw)) for (const st of s) if (st.kind === 'partner') { st.audio = st.id; if (!lines.some(l => l.id === st.id)) lines.push({ id: st.id, who: st.who, text: st.words }); }
+lines.push({ id: 'banner-para', who: 'RN', text: 'Your drug today is paracetamol, one gram, P O, four times a day.' });
+lines.push({ id: 'banner-meto', who: 'RN', text: 'Your drug today is metoprolol succinate C R, forty-seven point five milligrams, P O, daily.' });
+fs.mkdirSync(path.join(here, 'audio'), { recursive: true });
+fs.writeFileSync(path.join(here, 'audio', 'lines.json'), JSON.stringify(lines, null, 1));
 const json = JSON.stringify(data).replace(/</g, '\\u003c');
 const tpl = fs.readFileSync(path.join(here, 'template.html'), 'utf8');
 if (!tpl.includes('/*DATA*/null')) throw new Error('template is missing the /*DATA*/null placeholder');

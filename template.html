@@ -115,6 +115,14 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .row{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
 .row button{flex:1;min-width:120px;padding:13px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
 .row button.pri{background:var(--acc);color:#06141b;border-color:var(--acc);font-weight:700}
+.field{display:grid;gap:6px;font-size:15px}
+.field small{color:var(--mute);font-size:12px;margin-left:6px}
+.field input,.field select{width:100%;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit}
+.note a{color:var(--acc)}
+.cov{font-size:13px;padding:4px 2px;color:var(--warn)}
+.missed{flex-basis:100%;font-size:14px;color:var(--warn)}
+.meter{height:3px;margin:8px 16px 0;background:var(--line);border-radius:2px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--ok);transition:width .08s linear}
 .toast{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:calc(96px + env(safe-area-inset-bottom,0px));background:#2a1f12;border:1px solid var(--warn);color:#ffe2b0;border-radius:12px;padding:12px 14px;font-size:14px;z-index:9}
 </style>
 </head>
@@ -151,8 +159,14 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
   <section class="blk opts">
     <h2>Settings</h2>
     <label><input type="checkbox" id="optVoice"> <span>Mr Luke and the RN read their lines out loud</span></label>
-    <label><input type="checkbox" id="optMic"> <span>Voice gate: only move on when it hears the keywords (off = tap the screen to move on)</span></label>
-    <p class="note warn" id="srWarn" hidden>This browser has no speech recognition, so you'll tap to move on. Open this page in Chrome on your Android for voice.</p>
+    <label><input type="checkbox" id="optMic"> <span>Voice check: only move on once you've said the line (off = tap the screen to move on)</span></label>
+    <div class="field"><label for="optKey">Groq API key <small>saved on this phone only</small></label>
+      <input type="password" id="optKey" autocomplete="off" spellcheck="false" placeholder="gsk_…"></div>
+    <p class="note" id="engineNote"></p>
+    <div class="field"><label for="optPause">Pause before it checks your line</label>
+      <select id="optPause"><option value="0.7">0.7 s</option><option value="1">1 s</option><option value="1.4">1.4 s</option><option value="2">2 s</option></select></div>
+    <div class="field"><label for="optNeed">How much of the line you must say</label>
+      <select id="optNeed"><option value="loose">Every keyword</option><option value="normal">Every keyword + 70% of the line</option><option value="strict">Every keyword + 85% of the line</option></select></div>
     <p class="note">Practice only. No notes or devices are allowed into the med admin assessment.</p>
     <button type="button" class="ghostbtn" id="reset">Reset progress</button>
   </section>
@@ -167,6 +181,7 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
   <div class="prog"><i id="progFill"></i></div>
   <div class="stage" id="stage"></div>
   <div class="chips" id="chips"></div>
+  <div class="meter"><i id="lvl"></i></div>
   <div class="heard" id="heard"></div>
   <div class="ctl">
     <button type="button" id="prev">◀ Back</button>
@@ -187,308 +202,6 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 <div class="toast" id="toast" hidden></div>
 
 <script>const DATA=/*DATA*/null;</script>
-<script>
-(() => {
-const D = DATA, $ = s => document.querySelector(s);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const K = 'clsFade.v1';
-const store = { lv:{}, best:{}, opt:{ voice:true, mic:true }, script:'vs', drug:'draw', scene:'' };
-try { const s = JSON.parse(localStorage.getItem(K) || '{}'); Object.assign(store, s, { opt:{ ...store.opt, ...(s.opt||{}) } }); } catch {}
-const save = () => { try { localStorage.setItem(K, JSON.stringify(store)); } catch {} };
-
-// compile gates: first variant of each group is its label
-for (const sc of Object.values(D.scripts)) for (const st of sc.steps) {
-  if (st.g) st.groups = st.g.map(src => ({ label: src.split('|')[0].replace(/\\b/g, ''), re: new RegExp(src, 'i') }));
-}
-const learnable = st => st.kind !== 'partner' && st.kind !== 'banner';
-const lv = st => store.lv[st.id] || 0;
-const norm = t => ' ' + t.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9.'\- ]+/g, ' ').replace(/\s+/g, ' ') + ' ';
-const pickDrug = () => Math.random() < .5 ? 'para' : 'meto';
-const maKey = () => store.drug === 'draw' ? pickDrug() : store.drug;
-const homeKeys = () => store.script === 'vs' ? ['vs'] : store.drug === 'draw' ? ['para', 'meto'] : [store.drug];
-const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-
-// ---------- text at a fade level ----------
-function marks(text, groups) {
-  const t = text.replace(/[’‘]/g, "'"), on = new Array(text.length).fill(false);
-  for (const g of groups || []) {
-    const re = new RegExp(g.re.source, 'gi'); let m;
-    while ((m = re.exec(t))) { if (!m[0].length) { re.lastIndex++; continue; } for (let i = m.index; i < m.index + m[0].length; i++) on[i] = true; }
-  }
-  const segs = []; let c = null;
-  for (let i = 0; i < text.length; i++) { if (!c || c.k !== on[i]) segs.push(c = { k: on[i], t: '' }); c.t += text[i]; }
-  return segs;
-}
-const firsts = s => s.replace(/[A-Za-z0-9’'.\-]+/g, w => w[0]);
-function body(st, L) {
-  if (st.kind === 'partner') return `<span class="who">${esc(st.who)}</span>“${esc(st.words)}”`;
-  if (st.kind === 'banner') return `<span class="ban">${esc(st.words)}</span>`;
-  if (L >= 4) return '<span class="blank"></span>';
-  if (L === 3) return `<span class="cue">${esc(st.title)}</span>`;
-  const pre = st.kind === 'say' ? '' : '<span class="hand">✋</span>';
-  const segs = marks(st.words || st.say, st.groups);
-  if (L === 2) return pre + segs.map(s => s.k ? `<b>${esc(firsts(s.t))}</b>` : `<span class="fd">${esc(firsts(s.t))}</span>`).join('');
-  if (L === 1) return pre + segs.map(s => s.k ? `<b>${esc(s.t)}</b>` : `<span class="fd">${esc(s.t)}</span>`).join('');
-  return pre + segs.map(s => s.k ? `<u>${esc(s.t)}</u>` : esc(s.t)).join('');
-}
-const label = st => st.kind === 'partner' ? '' : st.kind === 'banner' ? 'Allocated on the day'
-  : st.kind === 'silent' ? 'Silent' : st.kind === 'act' ? 'Do it · say it' : st.to ? `To ${st.to}` : 'Say';
-
-// ---------- speech ----------
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, want = false, paused = false, live = false, R = null;
-function micOn() { if (!SR) return; want = true; paused = false; boot(); updMic(); }
-function micOff() { want = false; try { rec && rec.abort(); } catch {} updMic(); }
-function pauseRec() { paused = true; try { rec && rec.abort(); } catch {} }
-function resumeRec() { paused = false; if (want) boot(); }
-function boot() {
-  if (!SR || !want || paused) return;
-  if (!rec) {
-    rec = new SR(); rec.lang = 'en-NZ'; rec.continuous = true; rec.interimResults = true;
-    rec.onstart = () => { live = true; R = null; if (S) S.from = { idx: 0, len: 0 }; updMic(); };
-    rec.onend = () => { live = false; updMic(); if (want && !paused) setTimeout(() => { try { rec.start(); } catch {} }, 120); };
-    rec.onerror = e => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { want = false; updMic(); toast('The microphone is blocked. Allow it for this site in Chrome settings, or turn the voice gate off and tap to move on.'); }
-      else if (e.error === 'network') toast('Speech recognition needs an internet connection.');
-    };
-    rec.onresult = e => { R = e.results; feed(); };
-  }
-  try { rec.start(); } catch {}
-}
-function feed() {
-  if (!S || !R) return;
-  let t = '';
-  for (let i = S.from.idx; i < R.length; i++) { let x = R[i][0].transcript; if (i === S.from.idx) x = x.slice(S.from.len); t += ' ' + x; }
-  heard(t);
-}
-function cutHere() {
-  if (R && R.length) { const i = R.length - 1; S.from = R[i].isFinal ? { idx: R.length, len: 0 } : { idx: i, len: R[i][0].transcript.length }; }
-  else S.from = { idx: 0, len: 0 };
-}
-let voices = [];
-if ('speechSynthesis' in window) { const lv2 = () => voices = speechSynthesis.getVoices(); lv2(); speechSynthesis.onvoiceschanged = lv2; }
-const voice = () => voices.find(v => /en.NZ/i.test(v.lang)) || voices.find(v => /en.AU/i.test(v.lang)) || voices.find(v => /en.GB/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-function play(st) {
-  return new Promise(res => {
-    const ms = 1100 + st.words.length * 45;
-    if (!(store.opt.voice && 'speechSynthesis' in window)) return setTimeout(res, ms);
-    pauseRec();
-    const u = new SpeechSynthesisUtterance(st.words.replace(/D G Y/g, 'D. G. Y.'));
-    const v = voice(); if (v) u.voice = v;
-    u.lang = v ? v.lang : 'en-NZ'; u.rate = .95; u.pitch = st.who === 'Mr Luke' ? .7 : st.who === 'RN' ? 1.15 : 1;
-    let over = false; const fin = () => { if (over) return; over = true; resumeRec(); res(); };
-    u.onend = fin; u.onerror = fin; setTimeout(fin, ms + 6000);
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
-  });
-}
-
-// ---------- session ----------
-let S = null, wl = null;
-const curStep = () => S && S.parts[S.pi] && S.parts[S.pi].steps[S.i];
-const banner = k => ({ kind: 'banner', id: 'banner', n: 0, scene: 'Med admin', title: '', who: '', words: `Your drug today: ${k === 'para' ? 'Paracetamol 1 g PO qid' : 'Metoprolol Succinate CR 47.5 mg PO daily'}` });
-function forkRounds() {
-  const all = [];
-  D.forks.forEach(f => ['vs', 'ma'].forEach(side => all.push({ f, side })));
-  for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
-  return all.slice(0, 10).map(({ f, side }) => {
-    const key = side === 'vs' ? 'vs' : pickDrug(), steps = D.scripts[key].steps, [a, b] = f[side];
-    const next = steps.find(s => s.n === b);
-    return { ...next, fork: { cue: f.cue, key, label: D.scripts[key].label, prev: a ? steps.find(s => s.n === a) : null } };
-  });
-}
-function start(mode) {
-  const parts = [];
-  if (mode === 'monday') { const m = maKey(); parts.push({ key: 'vs', steps: D.scripts.vs.steps }); parts.push({ key: m, steps: [banner(m), ...D.scripts[m].steps] }); }
-  else if (mode === 'fork') parts.push({ key: 'fork', steps: forkRounds() });
-  else {
-    const key = store.script === 'vs' ? 'vs' : maKey();
-    let steps = D.scripts[key].steps;
-    if (mode === 'drill' && store.scene) steps = steps.filter(s => s.scene === store.scene);
-    if (key !== 'vs' && store.drug === 'draw' && mode !== 'drill') steps = [banner(key), ...steps];
-    parts.push({ key, steps });
-  }
-  S = { mode, parts, pi: 0, i: 0, t0: Date.now(), log: [], from: { idx: 0, len: 0 } };
-  show('sess');
-  $('#prev').disabled = mode !== 'learn';
-  $('#next').textContent = mode === 'learn' ? 'Next ▶' : 'Skip ▶';
-  $('#clock').textContent = '';
-  try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => wl = w).catch(() => {}); } catch {}
-  if (store.opt.mic && SR) micOn(); else updMic();
-  enter();
-}
-function enter() {
-  const st = curStep(); if (!st) return finish(true);
-  Object.assign(S, { hits: new Set(), hinted: 0, ts: Date.now(), last: Date.now(), lock: false });
-  render();
-  if (st.kind === 'partner' || st.kind === 'banner') { S.lock = true; play(st).then(() => { if (S && curStep() === st) { S.lock = false; advance(); } }); }
-}
-function heard(t) {
-  $('#heard').textContent = t.trim() ? '“' + t.trim().slice(-80) + '”' : '';
-  const st = curStep();
-  if (!st || !st.groups || S.lock) return;
-  const n = norm(t); let got = false;
-  st.groups.forEach((g, i) => { if (!S.hits.has(i) && g.re.test(n)) { S.hits.add(i); got = true; } });
-  if (got) { S.last = Date.now(); chips(); if (S.hits.size === st.groups.length) done(S.hinted ? 'hint' : 'ok'); }
-}
-function done(result) {
-  const st = curStep(); if (!st || S.lock) return;
-  S.lock = true;
-  if (learnable(st)) {
-    const key = st.fork ? st.fork.key : S.parts[S.pi].key;
-    S.log.push({ id: st.id, n: st.n, title: st.title, scene: st.scene, key, result });
-    let v = lv(st);
-    if (S.mode === 'learn') { if (result !== 'skip' && v < 1) v = 1; }
-    else v = result === 'ok' ? Math.min(4, v + 1) : result === 'hint' ? Math.max(0, v - 1) : Math.max(0, v - 2);
-    store.lv[st.id] = v; save();
-  }
-  try { navigator.vibrate && navigator.vibrate(result === 'ok' ? 25 : [20, 60, 20]); } catch {}
-  const stage = $('#stage'); stage.classList.add(result === 'skip' ? 'bad' : 'ok');
-  setTimeout(() => { stage.classList.remove('ok', 'bad'); if (S) advance(); }, result === 'skip' ? 160 : 420);
-}
-function advance() {
-  cutHere(); S.i++;
-  if (S.i >= S.parts[S.pi].steps.length) { S.pi++; S.i = 0; if (S.pi >= S.parts.length) return finish(true); }
-  enter();
-}
-function back() {
-  if (!S || S.mode !== 'learn' || S.i === 0) return;
-  speechSynthesis && speechSynthesis.cancel(); resumeRec();
-  cutHere(); S.i--; enter();
-}
-function showLevel(st, isCur) {
-  if (S.mode === 'learn') return 0;
-  if (isCur && S.hinted) return S.hinted >= 2 ? 0 : (S.mode === 'drill' ? Math.max(0, lv(st) - 2) : 3);
-  if (S.mode === 'drill') return lv(st);
-  return 4;
-}
-function render() {
-  const st = curStep(), p = S.parts[S.pi];
-  $('#sTitle').textContent = S.mode === 'fork' ? 'Fork drill' : D.scripts[p.key].label;
-  $('#sScene').textContent = S.mode === 'fork' ? `Round ${S.i + 1} of ${p.steps.length}` : `${st.scene}${st.n ? ' · step ' + st.n + ' of ' + D.scripts[p.key].steps.length : ''}`;
-  $('#progFill').style.width = ((S.parts.slice(0, S.pi).reduce((a, q) => a + q.steps.length, 0) + S.i) / S.parts.reduce((a, q) => a + q.steps.length, 0) * 100) + '%';
-  const L = showLevel(st, true);
-  const long = ((st.words || st.say || '').length > 200 && L < 3) ? ' long' : '';
-  const extras = (S.mode === 'learn' || (S.hinted >= 2)) && learnable(st)
-    ? `${st.do ? `<div class="extra">${esc(st.do)}</div>` : ''}${st.mistake ? `<div class="extra mist">⚠ ${esc(st.mistake)}</div>` : ''}` : '';
-  const trap = st.trap && (S.mode === 'learn' || S.mode === 'drill') ? `<span class="tag">${esc(st.trap)}</span><br>` : '';
-  const curHTML = `<div class="line cur${long}${st.kind === 'partner' ? ' partner' : ''}">${trap}<span class="lab">${label(st)}</span>${body(st, L)}${extras}</div>`;
-  let html;
-  if (S.mode === 'fork') {
-    const f = st.fork;
-    html = `<div class="fk"><div class="pr">${esc(f.label)}</div><div class="cueline">${esc(f.cue)}</div>
-      <div class="prev"><small>Just done</small>${f.prev ? (f.prev.kind === 'partner' ? `${esc(f.prev.who)}: “${esc(f.prev.words)}”` : esc(f.prev.title)) : 'Nothing yet'}</div>
-      <div class="q">What comes next?</div>${curHTML}</div>`;
-  } else if (S.mode === 'run' || S.mode === 'monday') {
-    html = `<div class="runv"><div class="sc">${esc(st.scene)}</div><div class="big">${st.kind === 'partner' ? esc(st.who) : st.kind === 'banner' ? 'Med admin' : 'Step ' + st.n}</div>${curHTML}</div>`;
-  } else {
-    const out = [];
-    for (let j = Math.max(0, S.i - 2); j <= Math.min(p.steps.length - 1, S.i + 3); j++) {
-      if (j === S.i) { out.push(curHTML); continue; }
-      const s = p.steps[j];
-      out.push(`<div class="line${Math.abs(j - S.i) === 1 ? ' near' : ''}${s.kind === 'partner' ? ' partner' : ''}">${body(s, showLevel(s, false))}</div>`);
-    }
-    html = out.join('');
-  }
-  const stage = $('#stage'); stage.innerHTML = html;
-  const c = stage.querySelector('.line.cur'); if (c) c.scrollIntoView({ block: 'center' });
-  chips();
-}
-function chips() {
-  const st = curStep(), el = $('#chips');
-  if (!st || !st.groups) { el.innerHTML = ''; return; }
-  const open = S.mode === 'learn' || S.hinted || (S.mode === 'drill' && lv(st) <= 1);
-  el.innerHTML = st.groups.map((g, i) => `<span class="chip${S.hits.has(i) ? ' hit' : ''}">${S.hits.has(i) || open ? esc(g.label) : '•••'}</span>`).join('');
-}
-function finish(complete) {
-  const s = S; S = null; micOff();
-  try { speechSynthesis.cancel(); } catch {} try { wl && wl.release(); } catch {} wl = null;
-  const secs = Math.round((Date.now() - s.t0) / 1000), log = s.log;
-  const c = r => log.filter(x => x.result === r).length;
-  const runKey = s.mode === 'monday' ? 'monday' : s.mode === 'run' ? (s.parts[0].key === 'vs' ? 'vs' : 'ma') : null;
-  let sub = `${log.length} steps`;
-  if (runKey && complete) {
-    const prev = store.best[runKey];
-    sub = `${fmt(secs)}${prev ? ` · best ${fmt(prev)}` : ''}`;
-    if (!c('skip') && (!prev || secs < prev)) { store.best[runKey] = secs; save(); sub += ' · new best'; }
-  }
-  const names = { learn: 'Learn', drill: 'Drill', run: 'Run', fork: 'Fork drill', monday: 'Monday run' };
-  $('#rTitle').textContent = `${names[s.mode]} ${complete ? "done" : "ended early"}`;
-  $('#rSub').textContent = sub;
-  $('#rTiles').innerHTML = `<div><b>${c('ok')}</b><small>clean</small></div><div><b>${c('hint')}</b><small>needed a hint</small></div><div><b>${c('skip')}</b><small>skipped</small></div>`;
-  const misses = log.filter(x => x.result !== 'ok');
-  $('#rMiss').innerHTML = misses.map(x => `<li class="${x.result}"><small>${esc(D.scripts[x.key].label)} · ${esc(x.scene)} · step ${x.n}</small>${esc(x.title)}</li>`).join('')
-    || '<li style="border-left-color:var(--ok)">Nothing missed. Move a level up: try a Run, or a Monday run.</li>';
-  const tally = {}; misses.forEach(x => { const k = x.key + '|' + x.scene; tally[k] = (tally[k] || 0) + 1; });
-  const worst = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
-  $('#rRow').innerHTML = (worst ? `<button type="button" class="pri" id="rFix">Drill “${esc(worst[0].split('|')[1])}”</button>` : '') +
-    `<button type="button" id="rAgain"${worst ? '' : ' class="pri"'}>Again</button><button type="button" id="rHome">Home</button>`;
-  if (worst) $('#rFix').onclick = () => { const [k, sc] = worst[0].split('|'); store.script = k === 'vs' ? 'vs' : 'ma'; if (k !== 'vs') store.drug = k; store.scene = sc; save(); start('drill'); };
-  $('#rAgain').onclick = () => start(s.mode);
-  $('#rHome').onclick = () => { show('home'); home(); };
-  show('report');
-}
-function updMic() {
-  const b = $('#mic');
-  if (!SR) { b.textContent = 'Tap screen'; b.disabled = true; return; }
-  b.disabled = false; b.classList.toggle('live', want);
-  b.textContent = want ? (live || paused ? 'Listening' : 'Starting…') : 'Mic off';
-}
-let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 6000); }
-function show(id) { ['home', 'sess', 'report'].forEach(x => $('#' + x).hidden = x !== id); window.scrollTo(0, 0); }
-
-// stall → hint, and the clock
-setInterval(() => {
-  if (!S) return;
-  if (S.mode === 'run' || S.mode === 'monday') $('#clock').textContent = fmt(Math.round((Date.now() - S.t0) / 1000));
-  const st = curStep();
-  if (!st || !st.groups || S.lock || S.mode === 'learn' || !want) return;
-  const lim = S.mode === 'run' || S.mode === 'monday' ? 10000 : 8000;
-  if (S.hinted < 2 && Date.now() - S.last > lim) { S.hinted++; S.last = Date.now(); render(); }
-}, 500);
-
-// ---------- home ----------
-function home() {
-  document.querySelectorAll('#pickScript button').forEach(b => b.classList.toggle('on', b.dataset.s === store.script));
-  document.querySelectorAll('#pickDrug button').forEach(b => b.classList.toggle('on', b.dataset.d === store.drug));
-  $('#pickDrug').hidden = store.script !== 'ma';
-  const keys = homeKeys();
-  $('#mastery').innerHTML = keys.map(k => {
-    const steps = D.scripts[k].steps.filter(learnable), tot = steps.reduce((a, s) => a + lv(s), 0);
-    return `<div class="mrow"><div class="mh"><span>${esc(D.scripts[k].label)} · ${steps.length} steps</span><b>${Math.round(100 * tot / (4 * steps.length))}% faded</b></div>
-      <div class="cells">${steps.map(s => `<i class="l${lv(s)}" title="${esc(s.n + '. ' + s.title + ' (level ' + lv(s) + ')')}"></i>`).join('')}</div></div>`;
-  }).join('') + `<div class="best">Best runs · Vital signs ${store.best.vs ? fmt(store.best.vs) : '—'} · Med admin ${store.best.ma ? fmt(store.best.ma) : '—'} · Monday ${store.best.monday ? fmt(store.best.monday) : '—'}</div>`;
-  const scenes = [...new Set(D.scripts[keys[0]].steps.map(s => s.scene))];
-  if (!scenes.includes(store.scene)) store.scene = '';
-  $('#scene').innerHTML = `<option value="">Whole practical</option>` + scenes.map(s => `<option${s === store.scene ? ' selected' : ''}>${esc(s)}</option>`).join('');
-  $('#optVoice').checked = store.opt.voice; $('#optMic').checked = store.opt.mic && !!SR; $('#optMic').disabled = !SR;
-  $('#srWarn').hidden = !!SR;
-}
-$('#pickScript').onclick = e => { const b = e.target.closest('button'); if (!b) return; store.script = b.dataset.s; store.scene = ''; save(); home(); };
-$('#pickDrug').onclick = e => { const b = e.target.closest('button'); if (!b) return; store.drug = b.dataset.d; save(); home(); };
-$('#scene').onchange = e => { store.scene = e.target.value; save(); };
-document.querySelectorAll('.mode').forEach(b => b.onclick = () => start(b.dataset.m));
-$('#optVoice').onchange = e => { store.opt.voice = e.target.checked; save(); };
-$('#optMic').onchange = e => { store.opt.mic = e.target.checked; save(); };
-let armed = false;
-$('#reset').onclick = e => {
-  if (!armed) { armed = true; e.target.textContent = 'Tap again to wipe all progress'; setTimeout(() => { armed = false; e.target.textContent = 'Reset progress'; }, 4000); return; }
-  store.lv = {}; store.best = {}; save(); armed = false; e.target.textContent = 'Progress wiped'; home();
-};
-
-// ---------- session controls ----------
-$('#quit').onclick = () => { if (S) finish(false); };
-$('#next').onclick = () => { const st = curStep(); if (!st || S.lock) return; done(S.mode === 'learn' ? 'ok' : 'skip'); };
-$('#prev').onclick = back;
-$('#hint').onclick = () => { if (!S || S.lock) return; S.hinted = Math.min(2, S.hinted + 1); render(); };
-$('#mic').onclick = () => { if (want) micOff(); else micOn(); };
-$('#stage').onclick = () => { if (S && !want && !S.lock && curStep() && curStep().groups) done(S.hinted ? 'hint' : 'ok'); };
-document.addEventListener('visibilitychange', () => {
-  if (S && document.visibilityState === 'visible' && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => wl = w).catch(() => {});
-});
-window.__say = t => { if (S) heard(t); };   // for testing without a mic
-home();
-})();
-</script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
